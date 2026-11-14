@@ -9,6 +9,8 @@ jobs:
         with: { node-version: '22' }
       - name: tests
         run: node --test kernel.test.mjs
+      - name: page inlines the gated kernel byte-for-byte
+        run: node --test page-parity.test.mjs
       - name: witness must be CLEAN
         run: |
           node witness.mjs mutate kernel.mjs --timeout 30000 --cap 600 --test node --test kernel.test.mjs | tee gate.out || true

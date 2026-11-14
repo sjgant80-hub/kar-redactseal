@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RedactSeal</title>
+<meta name="description" content="RedactSeal — a sovereign, witness-gated kernel that redacts named spans of a document and emits a seal proving the redaction is faithful: the kept text is untouched, the removals are real, and any later disclosure can be checked against it — without the verifier ever seeing what was removed. Runs in your browser; nothing uploaded. The hash is FNV-1a (fast, non-cryptographic) — see the honest limits." />
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#15181d; --muted:#5b6471; --line:#e3e7ec;
+  --accent:#2f6df6; --accent-ink:#ffffff; --ok:#1a8f4c; --no:#c23b3b; --warn:#b26a00;
+  --code:#f0f2f6; --shadow:0 1px 2px rgba(20,24,33,.05),0 6px 20px rgba(20,24,33,.06);
+  --radius:14px; --maxw:860px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1116; --panel:#151a21; --ink:#e8ecf1; --muted:#9aa5b3; --line:#232a33;
+    --accent:#5b8cff; --accent-ink:#0e1116; --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a;
+    --code:#1b212a; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --panel:#151a21; --ink:#e8ecf1; --muted:#9aa5b3; --line:#232a33;
+  --accent:#5b8cff; --accent-ink:#0e1116; --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a;
+  --code:#1b212a; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 16px}
+header.hero{padding:48px 16px 24px}
+.kicker{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-size:clamp(32px,6vw,52px);line-height:1.05;margin:.3em 0 .2em;letter-spacing:-.02em}
+.lede{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:46ch}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.badge{font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+.badge.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+.badge.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+section{padding:30px 0;border-top:1px solid var(--line)}
+section:first-of-type{border-top:none}
+h2{font-size:clamp(22px,3.5vw,30px);letter-spacing:-.01em;margin:0 0 .5em}
+h3{font-size:18px;margin:1.4em 0 .4em}
+p{margin:.6em 0}
+.muted{color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+.card.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 7%,var(--panel))}
+.grid{display:grid;gap:14px}
+@media(min-width:620px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:var(--code);padding:1.5px 6px;border-radius:6px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.5}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.sm{padding:5px 10px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+label{font-size:13px;color:var(--muted);font-weight:600}
+.verdict{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;font-weight:700;font-size:17px;border:1px solid var(--line)}
+.verdict.met{background:color-mix(in srgb,var(--ok) 10%,var(--panel));color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+.verdict.unmet{background:color-mix(in srgb,var(--no) 9%,var(--panel));color:var(--no);border-color:color-mix(in srgb,var(--no) 30%,var(--line))}
+.dot{width:12px;height:12px;border-radius:50%;background:currentColor;flex:none}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;color:var(--muted)}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.tag{font-size:11.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--code);color:var(--muted)}
+.note{font-size:13.5px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px;margin:12px 0}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14.5px}
+.kv b{font-variant-numeric:tabular-nums}
+.big{font-size:clamp(26px,5vw,40px);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.theme-toggle{position:fixed;top:12px;right:12px;z-index:10}
+.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin-top:10px}
+.toc a{color:var(--accent);text-decoration:none}
+footer{padding:40px 16px 60px;color:var(--muted);font-size:13.5px;text-align:center}
+.svgwrap{overflow:auto}
+.mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
+.doc{font-family:ui-monospace,monospace;font-size:13.5px;line-height:1.7;background:var(--code);border:1px solid var(--line);border-radius:10px;padding:12px}
+.reveal-row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.reveal-row input{flex:1;min-width:120px;font-family:ui-monospace,monospace;font-size:13px}
+.redbox{color:var(--no);font-weight:700}
+mark{background:color-mix(in srgb,var(--warn) 30%,transparent);color:inherit;border-radius:3px;padding:0 2px}
+</style>
+</head>
+<body>
+<button class="btn sm theme-toggle" id="themeBtn" aria-label="Toggle theme">◐ theme</button>
+
+<header class="hero wrap">
+  <div class="kicker">A sovereign trust-rail kernel · by Kar</div>
+  <h1>RedactSeal</h1>
+  <p class="lede">Black out the secret parts of a document and hand it over — with a <b>seal</b> that proves you did it honestly: the text you kept is untouched, the parts you removed are real, and if anyone later reveals a removed part, that disclosure can be checked against the seal. The verifier never has to see what was hidden. In your browser, nothing uploaded.</p>
+  <div class="badges">
+    <span class="badge ok">witness mutation gate · 32/32 killed</span>
+    <span class="badge ok">unit tests + parity on every push</span>
+    <span class="badge">pure kernel · never throws · a verdict, not a crash</span>
+    <span class="badge warn">hash is FNV-1a (fast, not crypto) — read the limits</span>
+  </div>
+  <div class="toc" aria-label="Contents">
+    <a href="#what">What it is</a>
+    <a href="#honest">Honest limits</a>
+    <a href="#start">Start here</a>
+    <a href="#try">Try it</a>
+    <a href="#how">How it works</a>
+    <a href="#blueprint">Blueprint</a>
+    <a href="#brochure">For buyers</a>
+    <a href="#cost">Cost case</a>
+    <a href="#adopt">Adoption</a>
+    <a href="#whitepaper">White paper</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="what">
+  <h2>What it is, in plain words</h2>
+  <p>Redaction is everywhere there is a duty to disclose but also to protect: a court orders documents released with third-party names blacked out; a freedom-of-information request is answered with exempt passages removed; a company shares an incident report with a partner but hides a customer's details. The person receiving the redacted document has a reasonable worry: <b>was anything else quietly changed?</b> And the person who redacted has a matching worry: <b>if I later have to reveal one of the hidden parts, can I prove it is the real one and not something I swapped in?</b></p>
+  <p>Today both sides rely on trust and a careful re-read. There is no small, portable proof that travels with the document.</p>
+  <p><b>RedactSeal is that proof.</b> You give it the document and the spans to remove. It returns the <b>redacted</b> text — each removal replaced by a numbered marker <code>[[R0]]</code>, <code>[[R1]]</code>… — a list of <b>positions</b> (where each removal sat and how long it was), and a single <b>seal</b>: a hash chain that binds the exact removed content to its exact place. Anyone holding the original can confirm the released redaction matches the sealed original. And later, if a removed span is disclosed, anyone holding the redacted document and the seal can check the disclosure is faithful — right content, right length, right position — <em>without being shown the other removals</em>. A wrong reveal, even one the same length, fails. The code a mutation gate proves is the code running under your clicks.</p>
+</section>
+
+<section id="honest">
+  <h2 style="color:var(--warn)">Honest limits — read this before you trust it</h2>
+  <div class="card warn">
+    <p style="margin-top:0"><b>The hash is FNV-1a, a fast 32-bit non-cryptographic hash — not SHA-256.</b> It is here because it is tiny, dependency-free, and reproducible for the mutation gate. Against an <em>accident</em> or an honest mistake it is more than enough: a changed character, a wrong reveal, a misplaced span all change the hash chain and fail verification. Against a <em>determined adversary</em> with collision-finding effort, a 32-bit hash is forgeable — someone could, with work, craft a different removed content that produces the same seal.</p>
+    <p><b>What is real, and what to swap.</b> The asset here is the <b>verification logic</b>, proven correct by a 32/32 mutation gate: it checks that every marker is present, every revealed span has exactly its pinned length, every revealed span sits at exactly its claimed position, and the recomputed hash chain equals the seal. That logic does not change when you change the hash. For adversarial use, replace the one <code>fnv1a</code> function with SHA-256 (or any collision-resistant hash) and keep everything else — the structure, the chain, and the proven checks. It is the <b>honest-faithfulness proof and the verification engine</b>, with a swappable hash primitive, not a finished cryptographic redaction product out of the box.</p>
+  </div>
+</section>
+
+<section id="start">
+  <h2>Start here — how to use it</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>On this page (no install)</h3>
+      <ol>
+        <li>Scroll to <a href="#try">Try it</a>.</li>
+        <li>Choose which fields of the sample document to redact. Watch the redacted text and the seal appear.</li>
+        <li>In the disclosure panel, each removed part is shown as a claimed reveal. Edit one — even to the same length — and watch verification turn red.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>In your own system</h3>
+      <pre>import { seal, verifyReveal } from './kernel.mjs';
+
+const s = seal(doc, [{start:9,end:17},{start:28,end:33}]);
+// s.redacted, s.positions, s.seal  → publish these
+
+// later, someone discloses the hidden spans:
+const v = verifyReveal(s.redacted, s.positions, claimed, s.seal);
+// v.valid === true only if every claim is faithful</pre>
+      <p class="muted" style="font-size:13px">One file, zero dependencies. Swap <code>fnv1a</code> for SHA-256 for adversarial use; the rest is unchanged.</p>
+    </div>
+  </div>
+</section>
+
+<section id="try">
+  <h2>Try it — the live kernel</h2>
+  <p class="muted">This panel calls the exact <code>seal</code>, <code>verifyOriginal</code> and <code>verifyReveal</code> functions the witness gate proves. Nothing is sent anywhere.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0">1 · The original document</h3>
+    <div class="doc" id="origDoc"></div>
+    <p style="margin:12px 0 4px"><label>Redact these fields:</label></p>
+    <div id="toggles" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+
+    <h3>2 · What you release (redacted + seal)</h3>
+    <div class="doc" id="redDoc">—</div>
+    <div class="grid two" style="margin-top:10px">
+      <div>
+        <div class="kv"><span>seal (hash chain)</span><b id="k_seal" class="mono">—</b></div>
+        <div class="kv" style="border-bottom:none"><span>spans removed</span><b id="k_count" class="mono">—</b></div>
+      </div>
+      <div>
+        <div class="verdict met" id="origVerdict" style="font-size:14px"><span class="dot"></span><span id="origVerdictText">—</span></div>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 0">The holder of the <em>original</em> can prove the released redaction matches what was sealed.</p>
+      </div>
+    </div>
+
+    <h3>3 · A later disclosure — is each revealed part faithful?</h3>
+    <p class="muted" style="font-size:13.5px;margin-top:2px">Each removed span is shown with its claimed true content. Edit any of them — change a digit, keep the same length — and watch the seal catch it.</p>
+    <div id="reveals"></div>
+    <div class="verdict" id="revVerdict" style="margin-top:12px"><span class="dot"></span><span id="revVerdictText">—</span></div>
+    <div style="margin-top:10px">
+      <span class="chip" id="resetReveal">↺ reset to the true disclosure</span>
+      <span class="chip" id="tamperReveal">✎ tamper the salary (same length)</span>
+    </div>
+    <p class="note" id="explain">—</p>
+  </div>
+</section>
+
+<section id="how">
+  <h2>How it works — traced from a real run</h2>
+  <p>Take the sample with all four fields redacted. The seal of this exact document and these exact removals is <b class="mono">506186502</b> (hex <code>1e2bcb06</code>). Here is the lifecycle — the numbers below are the actual run.</p>
+  <div class="svgwrap card" style="padding:12px">
+  <svg viewBox="0 0 820 310" width="100%" role="img" aria-label="Lifecycle: a document is redacted into a marked document plus a seal; later a disclosure is checked for length, position and hash-chain against the seal, giving faithful or forged">
+    <style>
+      .b{fill:var(--code);stroke:var(--line)}
+      .t{fill:var(--ink);font:12.5px ui-monospace,monospace}
+      .lbl{fill:var(--muted);font:12px -apple-system,sans-serif}
+      .ar{stroke:var(--accent);stroke-width:2;fill:none;marker-end:url(#a)}
+      .no{fill:var(--no);font:600 12px ui-monospace,monospace}
+      .ok{fill:var(--ok);font:600 12.5px ui-monospace,monospace}
+    </style>
+    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--accent)"/></marker></defs>
+
+    <text x="12" y="20" class="lbl">1 · original + spans</text>
+    <rect class="b" x="10" y="30" width="200" height="86" rx="8"/>
+    <text x="22" y="56" class="t">Employee Jane Doe …</text>
+    <text x="22" y="78" class="t">remove: name, id,</text>
+    <text x="22" y="100" class="t">salary, email</text>
+
+    <path class="ar" d="M215,73 L247,73"/>
+    <text x="256" y="20" class="lbl">2 · redact + chain</text>
+    <rect class="b" x="254" y="30" width="214" height="86" rx="8"/>
+    <text x="266" y="54" class="t">Employee [[R0]] (staff</text>
+    <text x="266" y="74" class="t">ID [[R1]]), salary [[R2]]…</text>
+    <text x="266" y="100" class="ok">seal = 506186502</text>
+
+    <path class="ar" d="M473,73 L505,73"/>
+    <text x="514" y="20" class="lbl">3 · publish</text>
+    <rect class="b" x="512" y="30" width="296" height="86" rx="8"/>
+    <text x="524" y="54" class="t">redacted doc + positions + seal</text>
+    <text x="524" y="76" class="lbl">removals NOT published —</text>
+    <text x="524" y="96" class="lbl">verifier never sees them</text>
+
+    <path class="ar" d="M660,120 L660,158"/>
+    <text x="300" y="150" class="lbl">4 · later: a disclosure is checked against the seal</text>
+    <rect class="b" x="300" y="160" width="508" height="60" rx="8"/>
+    <text x="312" y="184" class="t">each reveal: right length? right position? chain = seal?</text>
+    <text x="312" y="204" class="ok">all yes → valid: true (faithful)</text>
+
+    <text x="12" y="150" class="lbl">the catch (same length!)</text>
+    <rect class="b" x="10" y="160" width="270" height="86" rx="8"/>
+    <text x="22" y="184" class="t">reveal salary as</text>
+    <text x="22" y="204" class="no">£99,000 (7 chars, same len)</text>
+    <text x="22" y="228" class="no">→ chain ≠ seal → valid: false</text>
+  </svg>
+  </div>
+  <p class="muted" style="font-size:14px">A same-length swap is the hard case — length checks alone miss it. The hash chain binds the exact <em>content</em> of every removal to its place, so <code>£82,000 → £99,000</code> changes the chain and fails. The mutation gate attacks every edge of that check — the length comparison, the marker-present test, the position re-slice, the chain equality — and each of the <b>32</b> rewrites is caught by a test.</p>
+</section>
+
+<section id="blueprint">
+  <h2>The blueprint — organ by organ</h2>
+  <table>
+    <tr><th>Organ</th><th>File</th><th>What it does</th></tr>
+    <tr><td><b>The kernel</b></td><td><code>kernel.mjs</code></td><td>Four pure functions: <code>fnv1a</code> (the swappable hash), <code>seal</code> (redact + chain), <code>verifyOriginal</code> (the original-holder's check), <code>verifyReveal</code> (the disclosure check). No I/O. Bad input returns <code>{ok:false, why}</code>; a failed verification returns <code>{ok:true, valid:false, why}</code> — a verdict, not an error.</td></tr>
+    <tr><td><b>The contract</b></td><td><code>kernel.test.mjs</code></td><td>Tests pinning: overlapping/out-of-range spans refused, the marker/length/position checks each catch a forgery, a same-length tamper fails the chain, empty input is handled.</td></tr>
+    <tr><td><b>The gate</b></td><td><code>witness.mjs</code></td><td>Mutates the kernel 32 ways and demands every mutant die under the tests. A survivor means a blind spot in the proof. Re-run on every push.</td></tr>
+    <tr><td><b>The proof</b></td><td><code>.github/workflows/gate.yml</code></td><td>CI re-runs tests + gate on GitHub's own runner. Green there is the un-forgeable proof the verification behaves as this page claims.</td></tr>
+    <tr><td><b>This page</b></td><td><code>index.html</code></td><td>Inlines the kernel byte-for-byte, so the logic you audit in CI is the logic running under your clicks. A parity test fails CI if the two drift.</td></tr>
+  </table>
+  <p class="note">Why a chain, not one hash of the whole thing? Because the chain binds each removal to its <em>position in sequence</em> as well as its content — so a reveal cannot be shuffled, duplicated, or moved to another slot without breaking it. Each link is <code>hash(previous | start | end | content)</code>.</p>
+</section>
+
+<section id="brochure">
+  <h2>For buyers — what RedactSeal does for your organisation</h2>
+  <p>Every disclosure with redactions is a small act of trust you are asking the recipient to take on faith. RedactSeal replaces that faith with a check, and protects you in return: if you ever have to reveal a redacted part, you can prove it is the genuine one.</p>
+  <div class="grid two">
+    <div class="card"><h3>For Legal / e-Discovery</h3><p>Produce redacted documents with a seal attached. Opposing counsel or the court can confirm nothing outside the redactions was altered, and a later court-ordered un-redaction of a specific passage can be proven faithful — without exposing the other protected passages. A concrete answer to "how do we know this is the same document?"</p></div>
+    <div class="card"><h3>For FOI / Information Governance</h3><p>Answer a request with exempt passages removed and a seal that the requester can check. If an exemption is later overturned and a passage released, the seal proves the released text is exactly what was there — closing the gap where a requester suspects the response was quietly edited.</p></div>
+    <div class="card"><h3>For the DPO / Privacy</h3><p>When sharing a document that mentions third parties, redact their data and keep the seal. It demonstrates data-minimisation was applied without altering the record, and lets you prove, if challenged, that the redaction was faithful — an audit artefact for a subject-access or disclosure dispute.</p></div>
+    <div class="card"><h3>For the CTO / Eng lead</h3><p>One pure function, zero dependencies, no network. Drop it into a document pipeline, a disclosure portal, or an agent that prepares releases. It <b>never throws</b>; a bad span returns a clean refusal. Swap the hash for SHA-256 where you need adversarial strength — the proven logic is unchanged.</p></div>
+  </div>
+
+  <h3>Security &amp; compliance, answered straight</h3>
+  <table>
+    <tr><th>Question</th><th>Answer</th></tr>
+    <tr><td>Is the seal cryptographically unforgeable?</td><td><b>Not as shipped</b> — it uses FNV-1a (32-bit), stated loudly in the limits above. It is strong against accident and honest error, and the verification logic is proven. For adversarial strength, swap in SHA-256; nothing else changes.</td></tr>
+    <tr><td>Does the verifier see what was removed?</td><td><b>No.</b> Verifying the redacted document, or checking a specific disclosure, never requires the other removals. That is the point.</td></tr>
+    <tr><td>Where does our document go?</td><td>Nowhere. The kernel runs in the page. No network call in the whole file — read it, or run it offline.</td></tr>
+    <tr><td>Can we self-host?</td><td>One static HTML file and one <code>.mjs</code>. Host on your intranet, or <code>import</code> the kernel. No licence server, no phone-home.</td></tr>
+    <tr><td>What's the licence?</td><td>MIT. Authored by Kar for AI Native Solutions; licence holder Simon Gant.</td></tr>
+  </table>
+</section>
+
+<section id="cost">
+  <h2>The cost case — computed here, change the inputs</h2>
+  <p>Where staff currently <b>re-read a redacted document against the original</b> to confirm nothing else was changed before release — and later field disputes about whether a disclosure was faithful — that review time is what a portable seal removes. Put your numbers in; the figure is computed live on this page.</p>
+  <div class="card">
+    <div class="grid three">
+      <div><label>Redacted documents released / month</label><br><input type="number" id="c_vol" value="120" min="0"></div>
+      <div><label>Minutes of manual re-check saved each</label><br><input type="number" id="c_min" value="20" min="0"></div>
+      <div><label>Loaded reviewer rate (£/hr)</label><br><input type="number" id="c_rate" value="45" min="0"></div>
+    </div>
+    <div style="margin-top:18px" class="grid three">
+      <div><div class="muted" style="font-size:13px">Staff hours removed / year</div><div class="big" id="c_hrs">—</div></div>
+      <div><div class="muted" style="font-size:13px">Annual saving</div><div class="big" id="c_save" style="color:var(--ok)">—</div></div>
+      <div><div class="muted" style="font-size:13px">Cost of RedactSeal</div><div class="big" style="color:var(--accent)">£0</div></div>
+    </div>
+    <p class="muted" style="font-size:13px;margin-top:14px">Illustrative. The default <b>£45/hr loaded rate</b> is a mid-range UK figure for a paralegal / information-governance officer (≈£32k–£45k base, grossed up ~1.3× for employer NI, pension and overhead; source: ONS ASHE 2024 median gross pay, legal/business-associate occupations, loaded). The minutes-saved figure is the manual re-check this removes; the larger, unmodelled saving is avoiding a disputed disclosure — a document challenged as altered is far more expensive than any per-document review. Compare against redaction/e-discovery SaaS seats, typically <b>£20–£90 per user per month</b>; RedactSeal's kernel is MIT and self-hosted, so the per-seat line is £0.</p>
+  </div>
+</section>
+
+<section id="adopt">
+  <h2>Adoption — how you roll it out</h2>
+  <div class="grid three">
+    <div class="card"><h3>1 · Try (today)</h3><p>Open this page, redact the sample, then tamper a reveal and watch it fail. No sign-up, nothing installed.</p></div>
+    <div class="card"><h3>2 · Embed (an afternoon)</h3><p><code>import { seal }</code> where your documents are prepared for release; publish the redacted text, positions and seal alongside the document. Swap <code>fnv1a</code> for SHA-256 if you need adversarial strength.</p></div>
+    <div class="card"><h3>3 · Prove (ongoing)</h3><p>Keep the witness gate in your own CI. Every change must still kill 32/32, so the verification logic cannot silently weaken. Treat the seal as part of the disclosure record.</p></div>
+  </div>
+</section>
+
+<section id="whitepaper">
+  <h2>White paper — the short version</h2>
+  <p><b>The problem.</b> A redacted document asks its recipient to trust that only the blacked-out parts were removed, and asks the redactor to be able to prove, later, that a disclosed part is the genuine one. Neither side has a small, portable artefact that settles it; both fall back on a manual re-read and good faith.</p>
+  <p><b>The claim.</b> A redaction should carry a seal that binds the exact removed content to its exact position, so that (a) the holder of the original can confirm the released redaction is faithful, and (b) any later disclosure of a removed span can be checked against the seal — right content, right length, right position — without the verifier seeing the other removals. RedactSeal computes this as a hash chain, each link <code>hash(previous | start | end | content)</code>, so a reveal cannot be altered, shortened, moved or reordered without breaking it.</p>
+  <p><b>Why a mutation gate, not just tests.</b> Passing tests prove the code works on the cases you thought of. A mutation gate proves the <em>tests</em> work: it rewrites the kernel 32 ways — weakening the length check, dropping the marker test, skipping the position re-slice, loosening the chain equality — and demands the tests catch every one. 32/32 killed means the verification has no blind spot a forgery could slip through.</p>
+  <p><b>What it is not — stated plainly.</b> The shipped hash is FNV-1a, a 32-bit non-cryptographic function, chosen for size and reproducibility. It is robust against accident and honest error, and the verification logic it drives is proven correct; it is <em>not</em> collision-resistant against a determined adversary. Replace <code>fnv1a</code> with SHA-256 for that, keeping the chain and the proven checks. RedactSeal is the faithful-redaction <em>proof structure and verification engine</em> with a swappable hash — not a sealed cryptographic product as shipped. It also does not find the sensitive spans for you (that is your policy or a detector upstream); it proves the redaction you chose is faithful.</p>
+  <div class="card">
+    <h3 style="margin-top:0">Risks, answered</h3>
+    <div class="kv"><span>"The hash could be forged by an attacker."</span><b>True of FNV-1a (32-bit) — swap in SHA-256; the proven logic is unchanged.</b></div>
+    <div class="kv"><span>"It might miss sensitive text."</span><b>Out of scope — it proves the spans you chose are faithfully removed; pair with a detector/policy for what to remove.</b></div>
+    <div class="kv"><span>"Someone reveals the wrong content."</span><b>Caught — wrong length, wrong position, or a changed character all fail verification.</b></div>
+    <div class="kv" style="border-bottom:none"><span>"The code could change silently."</span><b>CI re-runs the gate + parity; a weakened check fails 32/32 or breaks parity.</b></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p><b>RedactSeal</b> — authored by <b>Kar</b>, the AI that builds for AI Native Solutions, under its own name. MIT · licence holder Simon Gant.</p>
+  <p>Repository &amp; CI: <a href="https://github.com/sjgant80-hub/kar-redactseal">github.com/sjgant80-hub/kar-redactseal</a> · the kernel on this page is byte-identical to the gated one. Siblings: <a href="https://sjgant80-hub.github.io/kar-quorumgate/">QuorumGate</a> · <a href="https://sjgant80-hub.github.io/kar-quorumfloor/">QuorumFloor</a> · <a href="https://sjgant80-hub.github.io/kar-quorumveil/">QuorumVeil</a> · <a href="https://sjgant80-hub.github.io/kar-consentdecay/">ConsentDecay</a>.</p>
+</footer>
+
+<script>
+// ---- theme toggle ----
+(function(){
+  const b=document.getElementById('themeBtn');
+  let t=null; try{t=localStorage.getItem('rs-theme')}catch(e){}
+  if(t)document.documentElement.setAttribute('data-theme',t);
+  b.addEventListener('click',()=>{
+    const cur=document.documentElement.getAttribute('data-theme');
+    const mq=window.matchMedia('(prefers-color-scheme:dark)').matches;
+    const next=(cur? cur : (mq?'dark':'light'))==='dark'?'light':'dark';
+    document.documentElement.setAttribute('data-theme',next);
+    try{localStorage.setItem('rs-theme',next)}catch(e){}
+  });
+})();
+
+// ============================================================
+//  THE KERNEL — byte-identical to kernel.mjs (gated 32/32).
+//  Do not edit here without re-running the witness on kernel.mjs.
+// ============================================================
+const FNV_OFFSET = 2166136261;
+const FNV_PRIME = 16777619;
+
+function fnv1aRaw(str) {
+  let h = FNV_OFFSET >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, FNV_PRIME) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function fnv1a(str) {
+  if (typeof str !== 'string') return { ok: false, why: 'input must be a string' };
+  return { ok: true, hash: fnv1aRaw(str) };
+}
+
+function normalizeSpans(text, spans) {
+  if (!Array.isArray(spans)) return { ok: false, why: 'spans must be an array' };
+  const out = [];
+  for (const s of spans) {
+    if (s === null || typeof s !== 'object' || Array.isArray(s)) {
+      return { ok: false, why: 'each span must be an object {start,end}' };
+    }
+    const { start, end } = s;
+    if (!Number.isInteger(start) || !Number.isInteger(end)) {
+      return { ok: false, why: 'span start/end must be integers' };
+    }
+    if (start < 0 || end > text.length || start >= end) {
+      return { ok: false, why: `span [${start},${end}) out of range or empty` };
+    }
+    out.push({ start, end });
+  }
+  out.sort((a, b) => a.start - b.start);
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].start < out[i - 1].end) return { ok: false, why: 'spans overlap' };
+  }
+  return { ok: true, spans: out };
+}
+
+// seal(text, spans) -> { ok, redacted, positions, seal, spanCount }
+// positions carry {start,end,len} in the ORIGINAL text; removed content is
+// replaced by [[R0]], [[R1]], ... markers in span order. The seal is a hash
+// chain: link_i = fnv1a(`${chain}|${start}|${end}|${removed}`).
+function seal(text, spans) {
+  if (typeof text !== 'string') return { ok: false, why: 'text must be a string' };
+  const norm = normalizeSpans(text, spans);
+  if (!norm.ok) return norm;
+  let chain = FNV_OFFSET >>> 0;
+  const positions = [];
+  let redacted = '';
+  let cursor = 0;
+  for (let i = 0; i < norm.spans.length; i++) {
+    const { start, end } = norm.spans[i];
+    const removed = text.slice(start, end);
+    chain = fnv1aRaw(`${chain}|${start}|${end}|${removed}`);
+    positions.push({ start, end, len: end - start });
+    redacted += text.slice(cursor, start) + `[[R${i}]]`;
+    cursor = end;
+  }
+  redacted += text.slice(cursor);
+  return { ok: true, redacted, positions, seal: chain, spanCount: norm.spans.length };
+}
+
+// verifyOriginal(text, spans, sealValue) -> { ok, valid }
+// Holder of the ORIGINAL recomputes the chain and checks it matches the seal.
+function verifyOriginal(text, spans, sealValue) {
+  if (!Number.isInteger(sealValue)) return { ok: false, why: 'seal must be an integer' };
+  const sealed = seal(text, spans);
+  if (!sealed.ok) return sealed;
+  return { ok: true, valid: sealed.seal === (sealValue >>> 0) };
+}
+
+// verifyReveal(redacted, positions, revealed, sealValue) -> { ok, valid, original? }
+// Holder of the REDACTED doc + seal checks a later disclosure: revealed[i] is
+// the claimed content of positions[i]. Faithful iff every marker is present,
+// every revealed span has the pinned length, the reconstructed document places
+// each revealed span exactly at its claimed position, and the recomputed hash
+// chain equals the seal. valid:false is a verdict, not an input error.
+function verifyReveal(redacted, positions, revealed, sealValue) {
+  if (typeof redacted !== 'string') return { ok: false, why: 'redacted must be a string' };
+  if (!Array.isArray(positions) || !Array.isArray(revealed)) {
+    return { ok: false, why: 'positions and revealed must be arrays' };
+  }
+  if (positions.length !== revealed.length) {
+    return { ok: false, why: 'positions/revealed length mismatch' };
+  }
+  if (!Number.isInteger(sealValue)) return { ok: false, why: 'seal must be an integer' };
+  let chain = FNV_OFFSET >>> 0;
+  let original = redacted;
+  for (let i = 0; i < positions.length; i++) {
+    const p = positions[i];
+    if (p === null || typeof p !== 'object' || !Number.isInteger(p.start) || !Number.isInteger(p.end)) {
+      return { ok: false, why: `position ${i} must be {start,end} with integers` };
+    }
+    const r = revealed[i];
+    if (typeof r !== 'string') return { ok: false, why: `revealed[${i}] must be a string` };
+    if (r.length !== p.end - p.start) {
+      return { ok: true, valid: false, why: `revealed[${i}] length does not match pinned span` };
+    }
+    const marker = `[[R${i}]]`;
+    if (!original.includes(marker)) {
+      return { ok: true, valid: false, why: `marker ${marker} missing from redacted document` };
+    }
+    original = original.replace(marker, r);
+    chain = fnv1aRaw(`${chain}|${p.start}|${p.end}|${r}`);
+  }
+  for (let i = 0; i < positions.length; i++) {
+    if (original.slice(positions[i].start, positions[i].end) !== revealed[i]) {
+      return { ok: true, valid: false, why: `revealed[${i}] does not sit at its claimed position` };
+    }
+  }
+  if (chain !== (sealValue >>> 0)) return { ok: true, valid: false, why: 'seal mismatch' };
+  return { ok: true, valid: true, original };
+}
+// ============================================================
+
+const TEXT = 'Employee Jane Doe (staff ID 44821), salary £82,000, email jane.doe@acme.com, flagged for review.';
+const FIELDS = [
+  { label:'Name',     value:'Jane Doe' },
+  { label:'Staff ID', value:'44821' },
+  { label:'Salary',   value:'£82,000' },
+  { label:'Email',    value:'jane.doe@acme.com' }
+];
+// resolve each field to a span in TEXT
+FIELDS.forEach(f=>{ const i=TEXT.indexOf(f.value); f.start=i; f.end=i+f.value.length; });
+
+function esc(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
+
+// highlight the candidate fields in the original doc
+document.getElementById('origDoc').innerHTML = (function(){
+  let out='', cur=0;
+  const sorted=[...FIELDS].sort((a,b)=>a.start-b.start);
+  for(const f of sorted){ out+=esc(TEXT.slice(cur,f.start))+'<mark>'+esc(f.value)+'</mark>'; cur=f.end; }
+  out+=esc(TEXT.slice(cur));
+  return out;
+})();
+
+// field toggles
+const togglesEl=document.getElementById('toggles');
+togglesEl.innerHTML=FIELDS.map((f,i)=>`<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-f="${i}" checked> ${esc(f.label)}</label>`).join('');
+
+let revealOverrides=null; // null = show true values
+
+function selectedSpans(){
+  const chosen=[];
+  togglesEl.querySelectorAll('input[data-f]').forEach(cb=>{ if(cb.checked) chosen.push(FIELDS[+cb.dataset.f]); });
+  chosen.sort((a,b)=>a.start-b.start);
+  return chosen;
+}
+
+function renderRedactedDoc(redacted){
+  // show markers in accent
+  document.getElementById('redDoc').innerHTML = esc(redacted).replace(/\[\[R(\d+)\]\]/g,'<span class="redbox">[[R$1]]</span>');
+}
+
+function render(){
+  const spans=selectedSpans().map(f=>({start:f.start,end:f.end}));
+  const s=seal(TEXT, spans);
+  const kSeal=document.getElementById('k_seal'), kCount=document.getElementById('k_count');
+  const ov=document.getElementById('origVerdict'), ovt=document.getElementById('origVerdictText');
+  const revealsEl=document.getElementById('reveals');
+  const rv=document.getElementById('revVerdict'), rvt=document.getElementById('revVerdictText');
+  const exp=document.getElementById('explain');
+
+  if(!s.ok || spans.length===0){
+    document.getElementById('redDoc').textContent='(select at least one field above — nothing to redact yet)';
+    kSeal.textContent='—'; kCount.textContent='0';
+    ov.className='verdict'; ovt.textContent='—';
+    revealsEl.innerHTML=''; rv.className='verdict'; rvt.textContent='—';
+    exp.textContent='Select at least one field to redact.';
+    return;
+  }
+  renderRedactedDoc(s.redacted);
+  kSeal.textContent = s.seal + '  (hex ' + s.seal.toString(16) + ')';
+  kCount.textContent = s.spanCount;
+
+  // verifyOriginal: the original-holder proves the release matches the seal
+  const vo=verifyOriginal(TEXT, spans, s.seal);
+  ov.className='verdict '+(vo.ok&&vo.valid?'met':'unmet');
+  ovt.textContent = vo.ok&&vo.valid ? 'original matches the seal ✓' : 'original does not match';
+
+  // disclosure reveals — true values unless overridden
+  const trueVals = spans.map(sp=>TEXT.slice(sp.start,sp.end));
+  if(!revealOverrides || revealOverrides.length!==trueVals.length) revealOverrides=trueVals.slice();
+  revealsEl.innerHTML = s.positions.map((p,i)=>`
+    <div class="reveal-row">
+      <span class="mono" style="color:var(--accent)">[[R${i}]]</span>
+      <span class="muted" style="font-size:12px">len ${p.len} @ ${p.start}</span>
+      <input type="text" data-rev="${i}" value="${esc(revealOverrides[i])}">
+    </div>`).join('');
+  revealsEl.querySelectorAll('input[data-rev]').forEach(inp=>{
+    inp.addEventListener('input',()=>{ revealOverrides[+inp.dataset.rev]=inp.value; runReveal(s); });
+  });
+
+  runReveal(s);
+}
+
+function runReveal(s){
+  const spans=selectedSpans().map(f=>({start:f.start,end:f.end}));
+  const rv=document.getElementById('revVerdict'), rvt=document.getElementById('revVerdictText'), exp=document.getElementById('explain');
+  const r=verifyReveal(s.redacted, s.positions, revealOverrides, s.seal);
+  const trueVals=spans.map(sp=>TEXT.slice(sp.start,sp.end));
+  const tampered = revealOverrides.some((v,i)=>v!==trueVals[i]);
+  if(r.ok && r.valid){
+    rv.className='verdict met';
+    rvt.textContent='FAITHFUL — every revealed span matches the seal';
+    exp.innerHTML='Each reveal has the pinned length, sits at its claimed position, and the recomputed hash chain equals the seal <b class="mono">'+s.seal+'</b>. The verifier confirmed this without ever seeing the other removals.';
+  } else if(r.ok && r.valid===false){
+    rv.className='verdict unmet';
+    rvt.textContent='FORGED — '+r.why;
+    exp.innerHTML=(tampered
+      ? 'A revealed value was changed. '
+      : '')+'The kernel returns <code>{valid:false, why:\''+esc(r.why)+'\'}</code> — a verdict, not a crash. '+
+      (r.why==='seal mismatch'
+        ? 'Note: it was the right <em>length</em>, so a length check alone would have missed it — the hash chain caught the changed content.'
+        : '');
+  } else {
+    rv.className='verdict unmet';
+    rvt.textContent='input error — '+r.why;
+    exp.textContent='The kernel refused the input cleanly (no throw).';
+  }
+}
+
+togglesEl.addEventListener('change',()=>{ revealOverrides=null; render(); });
+document.getElementById('resetReveal').addEventListener('click',()=>{ revealOverrides=null; render(); });
+document.getElementById('tamperReveal').addEventListener('click',()=>{
+  // set the salary field (if redacted) to a same-length wrong value
+  const spans=selectedSpans();
+  const idx=spans.findIndex(f=>f.label==='Salary');
+  if(idx>=0){ if(!revealOverrides) revealOverrides=spans.map(f=>TEXT.slice(f.start,f.end)); revealOverrides[idx]='£99,000'; render(); }
+});
+render();
+
+// ---- cost model ----
+function money(n){ return '£'+Math.round(n).toLocaleString('en-GB'); }
+function cost(){
+  const vol=Math.max(0,+document.getElementById('c_vol').value||0);
+  const min=Math.max(0,+document.getElementById('c_min').value||0);
+  const rate=Math.max(0,+document.getElementById('c_rate').value||0);
+  const hrs=vol*12*min/60;
+  document.getElementById('c_hrs').textContent=Math.round(hrs).toLocaleString('en-GB');
+  document.getElementById('c_save').textContent=money(hrs*rate);
+}
+['c_vol','c_min','c_rate'].forEach(id=>document.getElementById(id).addEventListener('input',cost));
+cost();
+</script>
+</body>
+</html>
